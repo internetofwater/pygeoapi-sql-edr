@@ -68,7 +68,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         LOGGER.debug("Adding external tables")
         self.table_models = [self.table_model]
-
+        self.joins = list()
         self.external_tables = provider_def.get("external_tables", {})
         for ext_table, ext_config in self.external_tables.items():
             ext_table_model = get_table_model(
@@ -83,6 +83,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 getattr(self.table_model, ext_config["foreign"])
             )
             remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
+            self.joins.append((ext_table_model, foreign_key == remote_key))
             foreign_relationship = relationship(
                 ext_table_model,
                 primaryjoin=foreign_key == remote_key,

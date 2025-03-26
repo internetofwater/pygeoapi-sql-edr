@@ -75,10 +75,18 @@ def test_can_single_edr_cols(config):
         129.0,
     ]
     with Session(p._engine) as session:
-        query = session.query(p.table_model).limit(1)
-        for result in query:
-            for edr_name, edr_val in zip(edr_names, edr_vals):
-                assert rgetattr(result, edr_name) == edr_val
+        result = session.query(p.table_model).first()
+        for edr_name, edr_val in zip(edr_names, edr_vals):
+            assert rgetattr(result, edr_name) == edr_val
+
+    with Session(p._engine) as session:
+        query = session.query(p.table_model)
+        for j in p.joins:
+            query = query.join(*j)
+
+        for edr_attr, edr_val in zip(edr_attrs, edr_vals):
+            result = query.with_entities(edr_attr).limit(1).scalar()
+            assert result == edr_val
 
 
 def test_fields(config):

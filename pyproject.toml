@@ -24,7 +24,8 @@ dependencies = [
     "psycopg2",
     "pydantic",
     "pygeoapi@https://github.com/webb-ben/pygeoapi/archive/refs/heads/pydantic.zip",
-    "pytest"
+    "pytest",
+    "pytest-cov"
 ]
 keywords = ['pygeoapi', 'edr', 'data']
 
@@ -44,3 +45,6 @@ classifiers=[   # see https://pypi.org/classifiers/
 [project.urls]
 Homepage = "https://github.com/internetofwater/pygeoapi-sql-edr"
 Repository = "https://github.com/internetofwater/pygeoapi-sql-edr"
+
+[tool.pytest.ini_options]
+addopts = "--cov=pygeoapi_sql_edr"
