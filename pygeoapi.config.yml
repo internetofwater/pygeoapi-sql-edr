@@ -122,15 +122,15 @@ resources:
             foreign: parameter_code
             remote: parameter_code
 
-      # - type: features
-      #   name: PostgresSQL
-      #   data:
-      #     host: ${POSTGRES_HOST}
-      #     dbname: ${POSTGRES_DB}
-      #     user: ${POSTGRES_USER}
-      #     password: ${POSTGRES_PASSWORD}
-      #     search_path: [capture]
-      #   table: waterservices_daily
-      #   id_field: id
-      #   geom_field: geometry
-      #   time_field: time
+      - type: feature
+        name: PostgreSQL
+        data:
+          host: ${POSTGRES_HOST}
+          dbname: ${POSTGRES_DB}
+          user: ${POSTGRES_USER}
+          password: ${POSTGRES_PASSWORD}
+          search_path: [capture]
+        table: waterservices_daily
+        id_field: id
+        geom_field: geometry
+        time_field: time

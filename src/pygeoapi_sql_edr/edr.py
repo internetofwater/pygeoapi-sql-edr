@@ -151,15 +151,18 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         return self._fields
 
-    # def items(self, **kwargs):
-    #     """
-    #     Retrieve a collection of items.
+    @BaseEDRProvider.register()
+    def items(self, **kwargs):
+        """
+        Retrieve a collection of items.
 
-    #     :returns: A GeoJSON representation of the items.
-    #     """
+        :param kwargs: Additional parameters for the request.
+        :returns: A GeoJSON representation of the items.
+        """
 
-    #     # We implement this method inside of the feature provider
-    #     pass
+        # This method is empty due to the way pygeoapi handles items requests
+        # We implement this method inside of the feature provider
+        pass
 
     @BaseEDRProvider.register()
     def locations(
