@@ -1,13 +1,18 @@
 # Copyright 2025 Lincoln Institute of Land Policy
 # SPDX-License-Identifier: MIT
 
+from typing import Any
+
 import logging
 
 LOGGER = logging.getLogger(__name__)
 
 
-def recursive_getattr(obj, attr):
-    """Recursively traverse an object's attributes using dot notation and return the final node."""
+def recursive_getattr(obj: Any, attr: str) -> Any:
+    """
+    Recursively traverse an object's attributes single dot
+    notation and return the final node.
+    """
     try:
         for part in attr.split("."):
             obj = getattr(obj, part)  # Use getattr, not recursive_getattr
@@ -16,7 +21,7 @@ def recursive_getattr(obj, attr):
         return
 
 
-def get_column_from_qualified_name(model, qualified_name):
+def get_column_from_qualified_name(model: Any, qualified_name: str) -> Any:
     # Split the fully qualified name into table name and column name
     parts = qualified_name.split(".")
 
