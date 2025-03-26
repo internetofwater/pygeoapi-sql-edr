@@ -133,13 +133,16 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         if not self._fields and hasattr(self, "parameter_id"):
             with Session(self._engine) as session:
-                result = session.query(self.table_model).distinct(self.pic)
+                result = (
+                    session.query(self.table_model)
+                    .distinct(self.pic)
+                    .with_entities(self.pic, self.pnc, self.puc)
+                )
 
-                for item in result:
-                    parameter_id = rgetattr(item, self.parameter_id)
-                    parameter_name = rgetattr(item, self.parameter_name)
-                    parameter_unit = rgetattr(item, self.parameter_unit)
+                for j in self.joins:
+                    result = result.join(*j)
 
+                for parameter_id, parameter_name, parameter_unit in result:
                     self._fields[parameter_id] = {
                         "type": "number",
                         "title": parameter_name,
@@ -148,16 +151,13 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         return self._fields
 
-    # @BaseEDRProvider.register()
     # def items(self, **kwargs):
     #     """
     #     Retrieve a collection of items.
 
-    #     :param kwargs: Additional parameters for the request.
     #     :returns: A GeoJSON representation of the items.
     #     """
 
-    #     # This method is empty due to the way pygeoapi handles items requests
     #     # We implement this method inside of the feature provider
     #     pass
 
@@ -205,12 +205,14 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 "numberReturned": 0,
             }
             for item in results.distinct(self.lc).limit(limit):
-                results = results.where(
-                    self.lc == rgetattr(item, self.location_field)
-                )
                 response["numberReturned"] += 1
                 response["features"].append(
-                    self._sqlalchemy_to_feature(item, results)
+                    self._sqlalchemy_to_feature(
+                        item,
+                        results.where(
+                            self.lc == rgetattr(item, self.location_field)
+                        ),
+                    )
                 )
 
         return response

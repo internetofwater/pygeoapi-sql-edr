@@ -93,7 +93,7 @@ def test_fields(config):
     """Testing query for a valid JSON object with geometry"""
     p = EDRProvider(config)
 
-    assert len(p.fields) == 8
+    assert len(p.fields) == 7
     for k, v in p.fields.items():
         assert len(k) == 5
         assert [k_ in ["title", "typex-ogc-unit"] for k_ in v]
