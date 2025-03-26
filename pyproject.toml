@@ -24,7 +24,7 @@ dependencies = [
     "psycopg2",
     "pydantic",
     "pygeoapi@https://github.com/webb-ben/pygeoapi/archive/refs/heads/pydantic.zip",
-
+    "pytest"
 ]
 keywords = ['pygeoapi', 'edr', 'data']
 

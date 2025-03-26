@@ -72,11 +72,16 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         self.external_tables = provider_def.get("external_tables", {})
         for ext_table, ext_config in self.external_tables.items():
             ext_table_model = get_table_model(
-                ext_table, ext_config["remote"], self.db_search_path, self._engine
+                ext_table,
+                ext_config["remote"],
+                self.db_search_path,
+                self._engine,
             )
             self.table_models.append(ext_table_model)
 
-            foreign_key = foreign(getattr(self.table_model, ext_config["foreign"]))
+            foreign_key = foreign(
+                getattr(self.table_model, ext_config["foreign"])
+            )
             remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
             foreign_relationship = relationship(
                 ext_table_model,
@@ -96,16 +101,22 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         self.parameter_id = edr_fields.get("parameter_id", "parameter_id")
         self.pic = gqname(self.table_model, self.parameter_id)
 
-        self.parameter_name = edr_fields.get("parameter_name", "parameter_name")  # noqa
+        self.parameter_name = edr_fields.get(
+            "parameter_name", "parameter_name"
+        )  # noqa
         self.pnc = gqname(self.table_model, self.parameter_name)
 
-        self.parameter_unit = edr_fields.get("parameter_unit", "parameter_unit")  # noqa
+        self.parameter_unit = edr_fields.get(
+            "parameter_unit", "parameter_unit"
+        )  # noqa
         self.puc = gqname(self.table_model, self.parameter_unit)
 
         self.result_field = edr_fields.get("result_field", "value")
         self.rc = gqname(self.table_model, self.result_field)
 
-        self.location_field = edr_fields.get("location_field", "monitoring_location_id")  # noqa
+        self.location_field = edr_fields.get(
+            "location_field", "monitoring_location_id"
+        )  # noqa
         self.lc = gqname(self.table_model, self.location_field)
 
         self.get_fields()
@@ -193,9 +204,13 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 "numberReturned": 0,
             }
             for item in results.distinct(self.lc).limit(limit):
-                results = results.where(self.lc == rgetattr(item, self.location_field))
+                results = results.where(
+                    self.lc == rgetattr(item, self.location_field)
+                )
                 response["numberReturned"] += 1
-                response["features"].append(self._sqlalchemy_to_feature(item, results))
+                response["features"].append(
+                    self._sqlalchemy_to_feature(item, results)
+                )
 
         return response
 
@@ -222,7 +237,10 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         feature = {
             "type": "Feature",
             "id": getattr(item, self.location_field),
-            "properties": {"datetime": datetime_range, "parameter-name": parameters},
+            "properties": {
+                "datetime": datetime_range,
+                "parameter-name": parameters,
+            },
         }
 
         # Convert geometry to GeoJSON style
