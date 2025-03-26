@@ -5,6 +5,9 @@ include .env
 deps:
 	uv sync --all-groups --locked --all-packages
 
+database:
+	docker compose up --build -d database
+
 # run pygeoapi dev
 dev:
 	UV_ENV_FILE=.env uv run pygeoapi openapi generate pygeoapi.config.yml --output-file pygeoapi.openapi.yml

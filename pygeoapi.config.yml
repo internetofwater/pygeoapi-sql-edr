@@ -84,11 +84,9 @@ resources:
 
   daily:
     type: collection
-    title:
-      en: Daily values
+    title: Daily values
     description:
-      en: >
-        Daily values
+      en: Daily values
     keywords:
       en:
         - automated
@@ -113,24 +111,26 @@ resources:
         id_field: id
         geom_field: geometry
         time_field: time
-        parameter_id: parameter_code
-        parameter_name: waterservices_timeseries_metadata.parameter_name
-        parameter_unit: unit_of_measure
+        edr_fields:
+          location_field: monitoring_location_id
+          result_field: value
+          parameter_id: parameter_code
+          parameter_name: waterservices_timeseries_metadata.parameter_name
+          parameter_unit: unit_of_measure
         external_tables:
           waterservices_timeseries_metadata:
             foreign: parameter_code
             remote: parameter_code
-            properties:
-              - parameter_name
-      - type: features
-        name: PostgresSQL
-        data:
-          host: ${POSTGRES_HOST}
-          dbname: ${POSTGRES_DB}
-          user: ${POSTGRES_USER}
-          password: ${POSTGRES_PASSWORD}
-          search_path: [capture]
-        table: waterservices_daily
-        id_field: id
-        geom_field: geometry
-        time_field: time
+
+      # - type: features
+      #   name: PostgresSQL
+      #   data:
+      #     host: ${POSTGRES_HOST}
+      #     dbname: ${POSTGRES_DB}
+      #     user: ${POSTGRES_USER}
+      #     password: ${POSTGRES_PASSWORD}
+      #     search_path: [capture]
+      #   table: waterservices_daily
+      #   id_field: id
+      #   geom_field: geometry
+      #   time_field: time
