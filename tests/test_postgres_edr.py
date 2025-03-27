@@ -52,7 +52,7 @@ def test_external_table_relationships(config):
         assert hasattr(p.table_model, table)
 
 
-def test_can_single_edr_cols(config):
+def test_can_query_single_edr_cols(config):
     p = EDRProvider(config)
     edr_attrs = [p.tc, p.pic, p.pnc, p.puc, p.lc, p.rc]
     assert all([isinstance(f, InstrumentedAttribute) for f in edr_attrs])
@@ -125,12 +125,45 @@ def test_locations(config):
     locations = p.locations()
 
     assert locations["type"] == "FeatureCollection"
-    assert len(locations["features"]) == 24
+    assert len(locations["features"]) == 23
 
     feature = locations["features"][0]
     assert feature["id"] == "USGS-01465798"
     assert feature["properties"]["datetime"] == "2024-11-17/2024-12-08"
     assert feature["properties"]["parameter-name"] == ["00060"]
+
+    parameters = [p["id"] for p in locations["parameters"]]
+    for f in locations["features"]:
+        for param in f["properties"]["parameter-name"]:
+            assert param in parameters
+
+
+def test_locations_limit(config):
+    p = EDRProvider(config)
+
+    locations = p.locations(limit=1)
+    assert locations["type"] == "FeatureCollection"
+    assert len(locations["features"]) == 1
+
+    locations = p.locations(limit=500)
+    assert locations["type"] == "FeatureCollection"
+    assert len(locations["features"]) == 23
+
+    locations = p.locations(limit=5)
+    assert locations["type"] == "FeatureCollection"
+    assert len(locations["features"]) == 5
+
+    parameters = [p["id"] for p in locations["parameters"]]
+    for f in locations["features"]:
+        for param in f["properties"]["parameter-name"]:
+            assert param in parameters
+
+
+def test_locations_bbox(config):
+    p = EDRProvider(config)
+
+    locations = p.locations(bbox=[-109, 31, -103, 37])
+    assert len(locations["features"]) == 3
 
 
 def test_locations_select_param(config):
@@ -150,3 +183,41 @@ def test_locations_select_param(config):
     locations = p.locations(select_properties=["00010", "00060"])
     assert len(locations["features"]) == 13
     assert len(locations["parameters"]) == 2
+
+
+def test_get_location(config):
+    p = EDRProvider(config)
+
+    location = p.locations(location_id="USGS-01465798")
+    assert [k in location for k in ["type", "domain", "parameters", "ranges"]]
+
+    assert location["type"] == "Coverage"
+
+    domain = location["domain"]
+    assert domain["type"] == "Domain"
+    assert domain["domainType"] == "PointSeries"
+
+    assert domain["axes"]["x"]["values"] == [-74.98516031202179]
+    assert domain["axes"]["y"]["values"] == [40.05695572943445]
+    assert domain["axes"]["t"]["values"] == [
+        datetime.date(2024, 11, 17),
+        datetime.date(2024, 11, 20),
+        datetime.date(2024, 12, 2),
+        datetime.date(2024, 12, 5),
+        datetime.date(2024, 12, 8),
+    ]
+
+    t_len = len(domain["axes"]["t"]["values"])
+    assert t_len == 5
+    assert t_len == len(set(domain["axes"]["t"]["values"]))
+
+    assert [k in location for k in ["type", "domain", "parameters", "ranges"]]
+
+    for param in location["parameters"]:
+        assert param in location["ranges"]
+
+    for range in location["ranges"].values():
+        assert range["axisNames"][0] in domain["axes"]
+        assert range["shape"][0] == t_len
+        assert len(range["values"]) == t_len
+        assert range["values"] == [8.39, 6.94, 4.5, 5.22, 5.08]
