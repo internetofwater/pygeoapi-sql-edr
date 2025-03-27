@@ -1,0 +1,136 @@
+# Copyright 2025 Lincoln Institute of Land Policy
+# SPDX-License-Identifier: MIT
+
+server:
+  bind:
+    host: localhost #change to your hostname if running your own instance
+    port: 5000
+  url: ${PYGEOAPI_URL} #change to host URL if running your own instance
+  mimetype: application/json; charset=UTF-8
+  encoding: utf-8
+  gzip: true
+  language: en-US
+  cors: true
+  pretty_print: true
+  limits:
+    default_items: 500
+    max_items: 10000
+  map:
+    url: https://tile.openstreetmap.org/{z}/{x}/{y}.png
+    attribution: '<a href="https://www.openstreetmap.org/copyright">© OpenStreetMap contributors</a>'
+
+logging:
+  level: ${PYGEOAPI_LOGLEVEL:-DEBUG}
+  # logfile: /tmp/pygeoapi.log
+
+metadata:
+  identification:
+    title: pygeoapi Postgres EDR
+    description: Provides Postgres EDR via pygeaopi
+    keywords:
+      - EDR
+      - pygeoapi
+      - postgres
+    keywords_type: theme
+    terms_of_service: https://creativecommons.org/licenses/by/4.0/
+    url: https://github.com/internetofwater/reference.geoconnex.us
+  license:
+    name: CC-BY 4.0 license
+    url: https://creativecommons.org/licenses/by/4.0/
+  provider:
+    name: Center for Geospatial Solutions
+    url: https://cgsearth.org/
+  contact:
+    address: 113 Brattle St
+    city: Cambridge
+    stateorprovince: Massachussetts
+    postalcode: 02138
+    country: USA
+    email: internetofwater@lincolninst.edu
+    url: https://internetofwater.org
+    role: pointOfContact
+    name: Benjamin Webb
+
+resources:
+  timeseries-metadata:
+    type: collection
+    title:
+      en: Timeseries metadata
+    description:
+      en: Timeseries metadata
+    keywords:
+      en:
+        - current
+        - single location
+    extents:
+      spatial:
+        bbox: [-180, -90, 180, 90]
+        crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+      temporal:
+        begin: null
+        end: null
+    providers:
+      - type: feature
+        name: PostgreSQL
+        data:
+          host: ${POSTGRES_HOST}
+          dbname: ${POSTGRES_DB}
+          user: ${POSTGRES_USER}
+          password: ${POSTGRES_PASSWORD}
+          search_path: [capture]
+        table: waterservices_timeseries_metadata
+        id_field: id
+        geom_field: geometry
+
+  daily:
+    type: collection
+    title: Daily values
+    description:
+      en: Daily values
+    keywords:
+      en:
+        - automated
+        - daily
+    extents:
+      spatial:
+        bbox: [-180, -90, 180, 90]
+        crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+      temporal:
+        begin: null
+        end: null
+    providers:
+      - type: edr
+        name: pygeoapi_sql_edr.edr.EDRProvider
+        data:
+          host: ${POSTGRES_HOST}
+          dbname: ${POSTGRES_DB}
+          user: ${POSTGRES_USER}
+          password: ${POSTGRES_PASSWORD}
+          search_path: [capture]
+        table: waterservices_daily
+        id_field: id
+        geom_field: geometry
+        time_field: time
+        edr_fields:
+          location_field: monitoring_location_id
+          result_field: value
+          parameter_id: parameter_code
+          parameter_name: waterservices_timeseries_metadata.parameter_name
+          parameter_unit: unit_of_measure
+        external_tables:
+          waterservices_timeseries_metadata:
+            foreign: parameter_code
+            remote: parameter_code
+
+      - type: feature
+        name: PostgreSQL
+        data:
+          host: ${POSTGRES_HOST}
+          dbname: ${POSTGRES_DB}
+          user: ${POSTGRES_USER}
+          password: ${POSTGRES_PASSWORD}
+          search_path: [capture]
+        table: waterservices_daily
+        id_field: id
+        geom_field: geometry
+        time_field: time
