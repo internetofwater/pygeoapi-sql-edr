@@ -13,12 +13,9 @@ def recursive_getattr(obj: Any, attr: str) -> Any:
     Recursively traverse an object's attributes single dot
     notation and return the final node.
     """
-    try:
-        for part in attr.split("."):
-            obj = getattr(obj, part)  # Use getattr, not recursive_getattr
-        return obj
-    except AttributeError:
-        return
+    for part in attr.split("."):
+        obj = getattr(obj, part)
+    return obj
 
 
 def get_column_from_qualified_name(model: Any, qualified_name: str) -> Any:
