@@ -96,7 +96,7 @@ def test_fields(config):
     assert len(p.fields) == 7
     for k, v in p.fields.items():
         assert len(k) == 5
-        assert [k_ in ["title", "typex-ogc-unit"] for k_ in v]
+        assert [k_ in ["title", "type", "x-ogc-unit"] for k_ in v]
 
     selected_mappings = {
         "00010": {
@@ -117,3 +117,36 @@ def test_fields(config):
     }
     for k, v in selected_mappings.items():
         assert p.fields[k] == v
+
+
+def test_locations(config):
+    p = EDRProvider(config)
+
+    locations = p.locations()
+
+    assert locations["type"] == "FeatureCollection"
+    assert len(locations["features"]) == 24
+
+    feature = locations["features"][0]
+    assert feature["id"] == "USGS-01465798"
+    assert feature["properties"]["datetime"] == "2024-11-17/2024-12-08"
+    assert feature["properties"]["parameter-name"] == ["00060"]
+
+
+def test_locations_select_param(config):
+    p = EDRProvider(config)
+
+    locations = p.locations()
+    assert len(locations["parameters"]) == 7
+
+    locations = p.locations(select_properties=["00010"])
+    assert len(locations["features"]) == 4
+    assert len(locations["parameters"]) == 1
+
+    locations = p.locations(select_properties=["00060"])
+    assert len(locations["features"]) == 9
+    assert len(locations["parameters"]) == 1
+
+    locations = p.locations(select_properties=["00010", "00060"])
+    assert len(locations["features"]) == 13
+    assert len(locations["parameters"]) == 2

@@ -170,7 +170,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         select_properties: list = [],
         bbox: list = [],
         datetime_: str = None,
-        limit: int = 10,
+        limit: int = 100,
         location_id: str = None,
         **kwargs,
     ):
@@ -205,6 +205,9 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             response = {
                 "type": "FeatureCollection",
                 "features": [],
+                "parameters": self._get_parameters(
+                    select_properties, aslist=True
+                ),
                 "numberReturned": 0,
             }
             for item in results.distinct(self.lc).limit(limit):
@@ -269,6 +272,40 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         # Convert parameter filters into SQL Alchemy filters
         filter_group = [self.pic == value for value in parameter]
         return or_(*filter_group)
+
+    def _get_parameters(self, parameters: list = [], aslist=False):
+        """
+        Generate parameters
+
+        :param datastream: The datastream data to generate parameters for.
+        :param label: The label for the parameter.
+
+        :returns: A dictionary containing the parameter definition.
+        """
+        if not parameters:
+            parameters = self.fields.keys()
+
+        out_params = {}
+        for param in parameters:
+            conf_ = self.fields[param]
+            out_params[param] = {
+                "id": param,
+                "type": "Parameter",
+                "name": conf_["title"],
+                "observedProperty": {
+                    "id": param,
+                    "label": {"en": conf_["title"]},
+                },
+                "unit": {
+                    "label": {"en": conf_["title"]},
+                    "symbol": {
+                        "value": conf_["x-ogc-unit"],
+                        "type": "http://www.opengis.net/def/uom/UCUM/",
+                    },
+                },
+            }
+
+        return list(out_params.values()) if aslist else out_params
 
     def __repr__(self):
         return f"<EDRProvider> {self.table}"
