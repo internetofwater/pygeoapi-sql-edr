@@ -70,7 +70,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             self.table_models.append(ext_table_model)
 
             foreign_key = foreign(
-                getattr(self.table_model, ext_config["foreign"])
+                rgetattr(self.table_model, ext_config["foreign"])
             )
             remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
             self.joins.append((ext_table_model, foreign_key == remote_key))
@@ -232,12 +232,8 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             "type": "Coverage",
             "domain": {
                 "type": "Domain",
-                "domainType": "PointSeries",
-                "axes": {
-                    "x": {"values": []},
-                    "y": {"values": []},
-                    "t": {"values": []},
-                },
+                "domainType": "",
+                "axes": {"t": {"values": []}},
                 "referencing": [GEOGRAPHIC_CRS, TEMPORAL_RS],
             },
             "parameters": [],
@@ -254,10 +250,20 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 .first()
             )
             geom = to_shape(geom)
-
-            axes = coverage["domain"]["axes"]
-            axes["x"]["values"] = [shapely.get_x(geom)]
-            axes["y"]["values"] = [shapely.get_y(geom)]
+            coverage["domain"]["domainType"] = geom.geom_type
+            if geom.geom_type == "Point":
+                coverage["domain"]["axes"].update(
+                    {
+                        "x": {"values": [shapely.get_x(geom)]},
+                        "y": {"values": [shapely.get_y(geom)]},
+                    }
+                )
+            else:
+                coverage["domain"]["axes"]["composite"] = {
+                    "dataType": "polygon",
+                    "coordinates": ["x", "y"],
+                    "values": shapely.geometry.mapping(geom),
+                }
 
             query = (
                 session.query(self.tc)
@@ -282,7 +288,12 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                     "values": [],
                 }
 
-            time_query = query.distinct().limit(limit).subquery()
+            time_query = (
+                query.distinct()
+                .order_by(self.tc.desc())
+                .limit(limit)
+                .subquery()
+            )
             time_subquery = aliased(self.table_model, time_query)
             time_alias = getattr(time_subquery, self.time_field)
 
@@ -314,7 +325,6 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                         location_id == self.lc,
                     ),
                 )
-                .order_by(self.tc)
             )
 
             t_values = coverage["domain"]["axes"]["t"]["values"]
@@ -340,7 +350,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         feature = {
             "type": "Feature",
-            "id": getattr(item, self.location_field),
+            "id": rgetattr(item, self.location_field),
             "properties": {
                 "datetime": datetime_range,
                 "parameter-name": parameters,
@@ -349,7 +359,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         # Convert geometry to GeoJSON style
         if hasattr(item, self.geom):
-            wkb_geom = getattr(item, self.geom)
+            wkb_geom = rgetattr(item, self.geom)
             shapely_geom = to_shape(wkb_geom)
             if crs_transform_out is not None:
                 shapely_geom = crs_transform_out(shapely_geom)
