@@ -200,11 +200,11 @@ def test_get_location(config):
     assert domain["axes"]["x"]["values"] == [-74.98516031202179]
     assert domain["axes"]["y"]["values"] == [40.05695572943445]
     assert domain["axes"]["t"]["values"] == [
-        datetime.date(2024, 11, 17),
-        datetime.date(2024, 11, 20),
-        datetime.date(2024, 12, 2),
-        datetime.date(2024, 12, 5),
         datetime.date(2024, 12, 8),
+        datetime.date(2024, 12, 5),
+        datetime.date(2024, 12, 2),
+        datetime.date(2024, 11, 20),
+        datetime.date(2024, 11, 17),
     ]
 
     t_len = len(domain["axes"]["t"]["values"])
@@ -220,4 +220,4 @@ def test_get_location(config):
         assert range["axisNames"][0] in domain["axes"]
         assert range["shape"][0] == t_len
         assert len(range["values"]) == t_len
-        assert range["values"] == [8.39, 6.94, 4.5, 5.22, 5.08]
+        assert range["values"] == [5.08, 5.22, 4.5, 6.94, 8.39]

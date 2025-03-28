@@ -3,14 +3,12 @@
 
 import logging
 
-from datetime import datetime
-from decimal import Decimal
 
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
 from geoalchemy2.shape import to_shape
 import shapely
 
-from sqlalchemy import func
+from sqlalchemy import func, case
 from sqlalchemy.orm import foreign, remote, Session, relationship, aliased
 from sqlalchemy.sql.expression import or_, and_
 
@@ -22,27 +20,6 @@ from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
 
 LOGGER = logging.getLogger(__name__)
 
-
-# sql-schema only allows these types, so we need to map from sqlalchemy
-# string, number, integer, object, array, boolean, null,
-# https://json-schema.org/understanding-json-schema/reference/type.html
-COLUMN_TYPE_MAP = {
-    bool: "boolean",
-    datetime: "string",
-    Decimal: "number",
-    float: "number",
-    int: "integer",
-    str: "string",
-}
-DEFAULT_TYPE = "string"
-
-# https://json-schema.org/understanding-json-schema/reference/string#built-in-formats  # noqa
-COLUMN_FORMAT_MAP = {
-    "date": "date",
-    "interval": "duration",
-    "time": "time",
-    "timestamp": "date-time",
-}
 
 GEOGRAPHIC_CRS = {
     "coordinates": ["x", "y"],
@@ -93,7 +70,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             self.table_models.append(ext_table_model)
 
             foreign_key = foreign(
-                getattr(self.table_model, ext_config["foreign"])
+                rgetattr(self.table_model, ext_config["foreign"])
             )
             remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
             self.joins.append((ext_table_model, foreign_key == remote_key))
@@ -199,7 +176,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         """
 
         if location_id:
-            return self.single_location(
+            return self.location(
                 location_id, select_properties, datetime_, limit
             )
 
@@ -218,14 +195,16 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             for j in self.joins:
                 results = results.join(*j)
 
-            parameters = results.distinct().with_entities(self.pic).all()
-            parameters = set([p for (p,) in parameters])
+            _ = results.distinct(self.pic).with_entities(self.pic)
+            parameters = self._get_parameters(
+                [p for (p,) in _.all()], aslist=True
+            )
 
             LOGGER.debug("Preparing response")
             response = {
                 "type": "FeatureCollection",
                 "features": [],
-                "parameters": self._get_parameters(parameters, aslist=True),
+                "parameters": parameters,
                 "numberReturned": 0,
             }
             for item in results.distinct(self.lc).limit(limit):
@@ -241,7 +220,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         return response
 
-    def single_location(
+    def location(
         self,
         location_id: str,
         select_properties: list = [],
@@ -253,12 +232,8 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             "type": "Coverage",
             "domain": {
                 "type": "Domain",
-                "domainType": "PointSeries",
-                "axes": {
-                    "x": {"values": []},
-                    "y": {"values": []},
-                    "t": {"values": []},
-                },
+                "domainType": "",
+                "axes": {"t": {"values": []}},
                 "referencing": [GEOGRAPHIC_CRS, TEMPORAL_RS],
             },
             "parameters": [],
@@ -275,10 +250,20 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 .first()
             )
             geom = to_shape(geom)
-
-            axes = coverage["domain"]["axes"]
-            axes["x"]["values"] = [shapely.get_x(geom)]
-            axes["y"]["values"] = [shapely.get_y(geom)]
+            coverage["domain"]["domainType"] = geom.geom_type
+            if geom.geom_type == "Point":
+                coverage["domain"]["axes"].update(
+                    {
+                        "x": {"values": [shapely.get_x(geom)]},
+                        "y": {"values": [shapely.get_y(geom)]},
+                    }
+                )
+            else:
+                coverage["domain"]["axes"]["composite"] = {
+                    "dataType": "polygon",
+                    "coordinates": ["x", "y"],
+                    "values": shapely.geometry.mapping(geom),
+                }
 
             query = (
                 session.query(self.tc)
@@ -290,39 +275,68 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
             for j in self.joins:
                 query = query.join(*j)
 
-            parameters = query.distinct(self.pic).with_entities(self.pic).all()
-            coverage["parameters"] = self._get_parameters(
-                [p for (p,) in parameters]
-            )
+            _ = query.distinct(self.pic).with_entities(self.pic)
+            parameters = [p for (p,) in _.all()]
 
-            time_query = query.distinct().order_by(self.tc.asc()).limit(limit)
-            axes["t"]["values"] = [t for (t,) in time_query]
-            shape = time_query.count()
-
-            time_subquery = aliased(self.table_model, time_query.subquery())
-            time_alias = getattr(time_subquery, self.time_field)
-            for (parameter,) in parameters:
-                results = (
-                    session.query(time_alias)
-                    .outerjoin(
-                        self.table_model,
-                        and_(
-                            time_alias == self.tc,
-                            parameter == self.pic,
-                            location_id == self.lc,
-                        ),
-                    )
-                    .order_by(time_alias.asc())
-                    .with_entities(self.rc)
-                )
-
-                coverage["ranges"][parameter] = {
+            coverage["parameters"] = self._get_parameters(parameters)
+            for p in parameters:
+                coverage["ranges"][p] = {
                     "type": "NdArray",
                     "dataType": "float",
                     "axisNames": ["t"],
-                    "shape": [shape],
-                    "values": [r for (r,) in results.limit(limit)],
+                    "shape": [0],
+                    "values": [],
                 }
+
+            time_query = (
+                query.distinct()
+                .order_by(self.tc.desc())
+                .limit(limit)
+                .subquery()
+            )
+            time_subquery = aliased(self.table_model, time_query)
+            time_alias = getattr(time_subquery, self.time_field)
+
+            # Create select columns for each parameter
+            select_columns = [
+                time_alias,
+                *[
+                    case(
+                        (
+                            and_(
+                                parameter == self.pic, location_id == self.lc
+                            ),
+                            self.rc,
+                        ),
+                        else_=None,
+                    ).label(parameter)
+                    for parameter in parameters
+                ],
+            ]
+
+            # Construct the query
+            results = (
+                session.query(*select_columns)
+                .select_from(time_subquery)
+                .outerjoin(
+                    self.table_model,
+                    and_(
+                        time_alias == self.tc,
+                        location_id == self.lc,
+                    ),
+                )
+            )
+
+            t_values = coverage["domain"]["axes"]["t"]["values"]
+            for row in results.limit(limit):
+                row = row._asdict()
+                t_values.append(row.pop(self.time_field))
+                for parameter, value in row.items():
+                    coverage["ranges"][parameter]["values"].append(value)
+                    coverage["ranges"][parameter]["shape"][0] += 1
+
+        if len(t_values) > 1:
+            coverage["domain"]["domainType"] += "Series"
 
         return coverage
 
@@ -336,7 +350,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         feature = {
             "type": "Feature",
-            "id": getattr(item, self.location_field),
+            "id": rgetattr(item, self.location_field),
             "properties": {
                 "datetime": datetime_range,
                 "parameter-name": parameters,
@@ -345,7 +359,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         # Convert geometry to GeoJSON style
         if hasattr(item, self.geom):
-            wkb_geom = getattr(item, self.geom)
+            wkb_geom = rgetattr(item, self.geom)
             shapely_geom = to_shape(wkb_geom)
             if crs_transform_out is not None:
                 shapely_geom = crs_transform_out(shapely_geom)
