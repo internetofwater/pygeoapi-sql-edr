@@ -3,16 +3,17 @@
 
 import logging
 
-
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
+from geoalchemy2.functions import ST_MakeEnvelope
 from geoalchemy2.shape import to_shape
 import shapely
+from typing import Optional
 
 from sqlalchemy import func, case
 from sqlalchemy.orm import foreign, remote, Session, relationship, aliased
 from sqlalchemy.sql.expression import or_, and_
 
-from pygeoapi.provider.postgresql import PostgreSQLProvider, get_table_model
+from pygeoapi.provider.sql import get_table_model, GenericSQLProvider
 from pygeoapi.provider.base_edr import BaseEDRProvider
 
 from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
@@ -35,26 +36,38 @@ TEMPORAL_RS = {
 }
 
 
-class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
-    """Generic provider for SQL EDR based on psycopg2
+class EDRProvider(BaseEDRProvider, GenericSQLProvider):
+    """
+    Generic provider for SQL EDR based on psycopg2
     using sync approach and server side
     cursor (using support class DatabaseCursor)
     """
 
-    def __init__(self, provider_def):
+    def __init__(
+        self,
+        provider_def: dict,
+        driver_name: str,
+        extra_conn_args: Optional[dict],
+    ):
         """
-        PostgreSQLProvider Class constructor
+        GenericSQLProvider Class constructor
 
         :param provider_def: provider definitions from yml pygeoapi-config.
                              data,id_field, name set in parent class
                              data contains the connection information
                              for class DatabaseCursor
+        :param driver_name: database driver name
+        :param extra_conn_args: additional custom connection arguments to
+                                pass for a query
+
 
         :returns: pygeoapi_sql_edr.edr.EDRProvider
         """
-        LOGGER.debug("Initialising Pseudo-count PostgreSQL provider.")
+        LOGGER.debug("Initialising EDR SQL provider.")
         BaseEDRProvider.__init__(self, provider_def)
-        PostgreSQLProvider.__init__(self, provider_def)
+        GenericSQLProvider.__init__(
+            self, provider_def, driver_name, extra_conn_args
+        )
 
         LOGGER.debug("Adding external tables")
         self.table_models = [self.table_model]
@@ -107,14 +120,14 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         self.location_field = edr_fields.get(
             "location_field", "monitoring_location_id"
-        )  # noqa
+        )
         self.lc = gqname(self.table_model, self.location_field)
 
         self.get_fields()
 
     def get_fields(self):
         """
-        Return fields (columns) from PostgreSQL table
+        Return fields (columns) from SQL table
 
         :returns: dict of fields
         """
@@ -414,3 +427,40 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
     def __repr__(self):
         return f"<EDRProvider> {self.table}"
+
+
+class PostgresEDRProvider(EDRProvider):
+    """
+    A provider for querying a PostgreSQL database
+    """
+
+    def __init__(self, provider_def: dict):
+        """
+        PostgreSQLProvider Class constructor
+
+        :param provider_def: provider definitions from yml pygeoapi-config.
+                             data,id_field, name set in parent class
+                             data contains the connection information
+                             for class DatabaseCursor
+        :returns: pygeoapi.provider.sql.PostgreSQLProvider
+        """
+
+        driver_name = "postgresql+psycopg2"
+        extra_conn_args = {
+            "client_encoding": "utf8",
+            "application_name": "pygeoapi",
+        }
+        super().__init__(provider_def, driver_name, extra_conn_args)
+
+    def _get_bbox_filter(self, bbox: list[float]):
+        """
+        Construct the bounding box filter function
+        """
+        if not bbox:
+            return True  # Let everything through if no bbox
+
+        # Since this provider uses postgis, we can use ST_MakeEnvelope
+        envelope = ST_MakeEnvelope(*bbox)
+        bbox_filter = self.gc.intersects(envelope)
+
+        return bbox_filter

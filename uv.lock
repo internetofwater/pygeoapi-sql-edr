@@ -659,8 +659,8 @@ wheels = [
 
 [[package]]
 name = "pygeoapi"
-version = "0.20.dev0"
-source = { url = "https://github.com/webb-ben/pygeoapi/archive/refs/heads/pydantic.zip" }
+version = "0.21.dev0"
+source = { url = "https://github.com/C-Loftus/pygeoapi/archive/refs/heads/mysql_provider.zip" }
 dependencies = [
     { name = "babel" },
     { name = "click" },
@@ -681,7 +681,7 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "tinydb" },
 ]
-sdist = { hash = "sha256:2e090da301eea1567a29aa68df4451549eddc4a9c280f1b244c4d69bbd55ee25" }
+sdist = { hash = "sha256:bed7df1e6c01d26755808084fed9b2fc6b3109d2aaea9433fe8125af4448bb23" }
 
 [package.metadata]
 requires-dist = [
@@ -691,7 +691,7 @@ requires-dist = [
     { name = "flask" },
     { name = "jinja2" },
     { name = "jsonschema" },
-    { name = "pydantic" },
+    { name = "pydantic", specifier = ">2.0" },
     { name = "pygeofilter" },
     { name = "pygeoif" },
     { name = "pyproj" },
@@ -723,7 +723,7 @@ requires-dist = [
     { name = "geoalchemy2" },
     { name = "psycopg2" },
     { name = "pydantic" },
-    { name = "pygeoapi", url = "https://github.com/webb-ben/pygeoapi/archive/refs/heads/pydantic.zip" },
+    { name = "pygeoapi", url = "https://github.com/C-Loftus/pygeoapi/archive/refs/heads/mysql_provider.zip" },
     { name = "pytest" },
     { name = "pytest-cov" },
 ]

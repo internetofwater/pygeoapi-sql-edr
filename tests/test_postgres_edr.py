@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, InstrumentedAttribute
 import datetime
 import pytest
 
-from pygeoapi_sql_edr.edr import EDRProvider
+from pygeoapi_sql_edr.edr import PostgresEDRProvider
 from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
 from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
 
@@ -43,7 +43,7 @@ def config():
 
 
 def test_external_table_relationships(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     assert p.table_model in p.table_models
     assert len(p.table_models) == 2
@@ -53,7 +53,7 @@ def test_external_table_relationships(config):
 
 
 def test_can_query_single_edr_cols(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
     edr_attrs = [p.tc, p.pic, p.pnc, p.puc, p.lc, p.rc]
     assert all([isinstance(f, InstrumentedAttribute) for f in edr_attrs])
     assert gqname(p.table_model, p.parameter_id) == p.pic
@@ -91,7 +91,7 @@ def test_can_query_single_edr_cols(config):
 
 def test_fields(config):
     """Testing query for a valid JSON object with geometry"""
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     assert len(p.fields) == 7
     for k, v in p.fields.items():
@@ -120,7 +120,7 @@ def test_fields(config):
 
 
 def test_locations(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     locations = p.locations()
 
@@ -139,7 +139,7 @@ def test_locations(config):
 
 
 def test_locations_limit(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     locations = p.locations(limit=1)
     assert locations["type"] == "FeatureCollection"
@@ -160,14 +160,14 @@ def test_locations_limit(config):
 
 
 def test_locations_bbox(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     locations = p.locations(bbox=[-109, 31, -103, 37])
     assert len(locations["features"]) == 3
 
 
 def test_locations_select_param(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     locations = p.locations()
     assert len(locations["parameters"]) == 7
@@ -186,7 +186,7 @@ def test_locations_select_param(config):
 
 
 def test_get_location(config):
-    p = EDRProvider(config)
+    p = PostgresEDRProvider(config)
 
     location = p.locations(location_id="USGS-01465798")
     assert [k in location for k in ["type", "domain", "parameters", "ranges"]]
