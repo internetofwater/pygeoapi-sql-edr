@@ -100,7 +100,7 @@ resources:
         end: null
     providers:
       - type: edr
-        name: pygeoapi_sql_edr.edr.EDRProvider
+        name: pygeoapi_sql_edr.edr.PostgresEDRProvider
         data:
           host: ${POSTGRES_HOST}
           dbname: ${POSTGRES_DB}
