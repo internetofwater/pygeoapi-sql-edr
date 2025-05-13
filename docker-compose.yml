@@ -19,3 +19,14 @@ services:
       - 5432:5432
     volumes:
       - ./tests/data/:/docker-entrypoint-initdb.d/
+
+
+  mysql:
+      image: mysql:8
+      ports:
+      - 3306:3306
+      env_file:
+        - .env
+      volumes:
+      # dump is not tracked in git due to size/privacy
+      - ./tests/data/dump.sql:/docker-entrypoint-initdb.d/init.sql:ro
