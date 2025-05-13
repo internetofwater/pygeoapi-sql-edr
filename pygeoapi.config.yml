@@ -52,10 +52,10 @@ metadata:
     name: Benjamin Webb
 
 resources:
-  timeseries-metadata:
+  timeseries-metadata-pg:
     type: collection
     title:
-      en: Timeseries metadata
+      en: Timeseries metadata Postgres
     description:
       en: Timeseries metadata
     keywords:
@@ -82,9 +82,9 @@ resources:
         id_field: id
         geom_field: geometry
 
-  daily:
+  daily-pg:
     type: collection
-    title: Daily values
+    title: Daily values Postgres
     description:
       en: Daily values
     keywords:
@@ -100,6 +100,7 @@ resources:
         end: null
     providers:
       - type: edr
+        db_kind: postgresql
         name: pygeoapi_sql_edr.edr.EDRProvider
         data:
           host: ${POSTGRES_HOST}
@@ -134,3 +135,60 @@ resources:
         id_field: id
         geom_field: geometry
         time_field: time
+
+
+  dump-mysql:
+    type: collection
+    title: MySQL Dump
+    description:
+      en: Daily values
+    keywords:
+      en:
+        - automated
+        - daily
+    extents:
+      spatial:
+        bbox: [-180, -90, 180, 90]
+        crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+      temporal:
+        begin: null
+        end: null
+    providers:
+      - type: edr
+        db_kind: mysql
+        name: pygeoapi_sql_edr.edr.EDRProvider
+        data:
+          host: localhost
+          port: 3306
+          dbname: ${MYSQL_DATABASE}
+          user: ${MYSQL_USER}
+          password: ${MYSQL_PASSWORD}
+          search_path: [test_geo_app]
+        table: location
+        id_field: locationID
+        geom_field: locationgeometry
+        time_field: createDate
+        edr_fields:
+          location_field: monitoring_location_id
+          result_field: value
+          parameter_id: parameter_code
+          parameter_name: waterservices_timeseries_metadata.parameter_name
+          parameter_unit: unit_of_measure
+        # external_tables:
+        #   waterservices_timeseries_metadata:
+        #     foreign: parameter_code
+        #     remote: parameter_code
+
+      - type: feature
+        name: MySQL
+        data:
+          host: localhost
+          port: 3306
+          dbname: ${MYSQL_DATABASE}
+          user: ${MYSQL_USER}
+          password: ${MYSQL_PASSWORD}
+          search_path: [test_geo_app]
+        table: location
+        id_field: locationID
+        geom_field: locationGeometry
+        time_field: createDate

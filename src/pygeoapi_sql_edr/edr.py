@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import logging
+from typing import Optional
 
 
 from geoalchemy2 import Geometry  # noqa - this isn't used explicitly but is needed to process Geometry columns
@@ -12,7 +13,7 @@ from sqlalchemy import func, case
 from sqlalchemy.orm import foreign, remote, Session, relationship, aliased
 from sqlalchemy.sql.expression import or_, and_
 
-from pygeoapi.provider.postgresql import PostgreSQLProvider, get_table_model
+from pygeoapi.provider.sql import PostgreSQLProvider, MySQLProvider, get_table_model
 from pygeoapi.provider.base_edr import BaseEDRProvider
 
 from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
@@ -35,13 +36,15 @@ TEMPORAL_RS = {
 }
 
 
-class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
+class EDRProvider(BaseEDRProvider):
     """Generic provider for SQL EDR based on psycopg2
     using sync approach and server side
     cursor (using support class DatabaseCursor)
     """
 
-    def __init__(self, provider_def):
+    base_provider: MySQLProvider | PostgreSQLProvider 
+
+    def __init__(self, provider_def: dict):
         """
         PostgreSQLProvider Class constructor
 
@@ -52,25 +55,33 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
 
         :returns: pygeoapi_sql_edr.edr.EDRProvider
         """
-        LOGGER.debug("Initialising Pseudo-count PostgreSQL provider.")
+        LOGGER.debug("Initialising underlying sql OAF provider.")
         BaseEDRProvider.__init__(self, provider_def)
-        PostgreSQLProvider.__init__(self, provider_def)
+        match provider_def["db_kind"]:
+            case "postgresql" | "postgres":
+                self.base_provider = PostgreSQLProvider(provider_def)
+            case "mysql":
+                self.base_provider = MySQLProvider(provider_def)
+            case _:
+                raise NotImplementedError(
+                    f"Database kind {provider_def['db_kind']} not supported"
+                )
 
         LOGGER.debug("Adding external tables")
-        self.table_models = [self.table_model]
-        self.joins = list()
-        self.external_tables = provider_def.get("external_tables", {})
+        self.table_models = [self.base_provider.table_model]
+        self.joins: list[tuple] = []
+        self.external_tables: dict = provider_def.get("external_tables", {})
         for ext_table, ext_config in self.external_tables.items():
             ext_table_model = get_table_model(
                 ext_table,
                 ext_config["remote"],
-                self.db_search_path,
-                self._engine,
+                self.base_provider.db_search_path,
+                self.base_provider._engine,
             )
             self.table_models.append(ext_table_model)
 
             foreign_key = foreign(
-                rgetattr(self.table_model, ext_config["foreign"])
+                rgetattr(self.base_provider.table_model, ext_config["foreign"])
             )
             remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
             self.joins.append((ext_table_model, foreign_key == remote_key))
@@ -81,34 +92,34 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 uselist=False,
                 viewonly=True,
             )
-            setattr(self.table_model, ext_table, foreign_relationship)
+            setattr(self.base_provider.table_model, ext_table, foreign_relationship)
 
         LOGGER.debug("Getting EDR Columns")
-        edr_fields = provider_def.get("edr_fields", {})
+        edr_fields: dict = provider_def.get("edr_fields", {})
 
-        self.tc = gqname(self.table_model, self.time_field)
-        self.gc = gqname(self.table_model, self.geom)
+        self.tc = gqname(self.base_provider.table_model, self.time_field)
+        self.gc = gqname(self.base_provider.table_model, self.base_provider.geom)
 
         self.parameter_id = edr_fields.get("parameter_id", "parameter_id")
-        self.pic = gqname(self.table_model, self.parameter_id)
+        self.pic = gqname(self.base_provider.table_model, self.parameter_id)
 
         self.parameter_name = edr_fields.get(
             "parameter_name", "parameter_name"
         )
-        self.pnc = gqname(self.table_model, self.parameter_name)
+        self.pnc = gqname(self.base_provider.table_model, self.parameter_name)
 
         self.parameter_unit = edr_fields.get(
             "parameter_unit", "parameter_unit"
         )
-        self.puc = gqname(self.table_model, self.parameter_unit)
+        self.puc = gqname(self.base_provider.table_model, self.parameter_unit)
 
         self.result_field = edr_fields.get("result_field", "value")
-        self.rc = gqname(self.table_model, self.result_field)
+        self.rc = gqname(self.base_provider.table_model, self.result_field)
 
         self.location_field = edr_fields.get(
             "location_field", "monitoring_location_id"
         )  # noqa
-        self.lc = gqname(self.table_model, self.location_field)
+        self.lc = gqname(self.base_provider.table_model, self.location_field)
 
         self.get_fields()
 
@@ -122,9 +133,9 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         LOGGER.debug("Get available fields/properties")
 
         if not self._fields and hasattr(self, "parameter_id"):
-            with Session(self._engine) as session:
+            with Session(self.base_provider._engine) as session:
                 result = (
-                    session.query(self.table_model)
+                    session.query(self.base_provider.table_model)
                     .distinct(self.pic)
                     .with_entities(self.pic, self.pnc, self.puc)
                 )
@@ -159,9 +170,9 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         self,
         select_properties: list = [],
         bbox: list = [],
-        datetime_: str = None,
+        datetime_: Optional[str] = None,
         limit: int = 100,
-        location_id: str = None,
+        location_id: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -180,13 +191,13 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 location_id, select_properties, datetime_, limit
             )
 
-        bbox_filter = self._get_bbox_filter(bbox)
-        time_filter = self._get_datetime_filter(datetime_)
+        bbox_filter = self.base_provider._get_bbox_filter(bbox)
+        time_filter = self.base_provider._get_datetime_filter(datetime_)
         parameter_filters = self._get_parameter_filters(select_properties)
 
-        with Session(self._engine) as session:
+        with Session(self.base_provider._engine) as session:
             results = (
-                session.query(self.table_model)
+                session.query(self.base_provider.table_model)
                 .where(bbox_filter)
                 .where(parameter_filters)
                 .where(time_filter)
@@ -224,7 +235,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         self,
         location_id: str,
         select_properties: list = [],
-        datetime_: str = None,
+        datetime_: Optional[str] = None,
         limit: int = 100,
         **kwargs,
     ):
@@ -241,10 +252,10 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         }
 
         parameter_filters = self._get_parameter_filters(select_properties)
-        time_filter = self._get_datetime_filter(datetime_)
-        with Session(self._engine) as session:
+        time_filter = self.base_provider._get_datetime_filter(datetime_)
+        with Session(self.base_provider._engine) as session:
             (geom,) = (
-                session.query(self.table_model)
+                session.query(self.base_provider.table_model)
                 .where(self.lc == location_id)
                 .with_entities(self.gc)
                 .first()
@@ -294,7 +305,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 .limit(limit)
                 .subquery()
             )
-            time_subquery = aliased(self.table_model, time_query)
+            time_subquery = aliased(self.base_provider.table_model, time_query)
             time_alias = getattr(time_subquery, self.time_field)
 
             # Create select columns for each parameter
@@ -319,7 +330,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
                 session.query(*select_columns)
                 .select_from(time_subquery)
                 .outerjoin(
-                    self.table_model,
+                    self.base_provider.table_model,
                     and_(
                         time_alias == self.tc,
                         location_id == self.lc,
@@ -358,8 +369,8 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         }
 
         # Convert geometry to GeoJSON style
-        if hasattr(item, self.geom):
-            wkb_geom = rgetattr(item, self.geom)
+        if hasattr(item, self.base_provider.geom):
+            wkb_geom = rgetattr(item, self.base_provider.geom)
             shapely_geom = to_shape(wkb_geom)
             if crs_transform_out is not None:
                 shapely_geom = crs_transform_out(shapely_geom)
@@ -388,7 +399,7 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         :returns: A dictionary containing the parameter definition.
         """
         if not parameters:
-            parameters = self.fields.keys()
+            parameters = list(self.fields.keys())
 
         out_params = {}
         for param in parameters:
@@ -413,4 +424,4 @@ class EDRProvider(BaseEDRProvider, PostgreSQLProvider):
         return list(out_params.values()) if aslist else out_params
 
     def __repr__(self):
-        return f"<EDRProvider> {self.table}"
+        return f"<EDRProvider> {self.base_provider.table}"

@@ -20,12 +20,14 @@ license = {file = "LICENSE"}
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "cryptography>=44.0.3",
     "geoalchemy2",
     "psycopg2",
     "pydantic",
-    "pygeoapi@https://github.com/webb-ben/pygeoapi/archive/refs/heads/pydantic.zip",
+    "pygeoapi@https://github.com/C-Loftus/pygeoapi/archive/refs/heads/mysql_provider.zip",
+    "pymysql>=1.1.1",
     "pytest",
-    "pytest-cov"
+    "pytest-cov",
 ]
 keywords = ['pygeoapi', 'edr', 'data']
 
