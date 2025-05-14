@@ -70,31 +70,36 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
         )
 
         LOGGER.debug("Adding external tables")
-        self.table_models = [self.table_model]
+        self.table_models = {self.table: self.table_model}
         self.joins = list()
         self.external_tables = provider_def.get("external_tables", {})
         for ext_table, ext_config in self.external_tables.items():
+            ext_path = ext_table.split(".", 1)
+            if "." in ext_table and ext_path[0] in self.table_models:
+                related_table, ext_table = ext_path
+                table_model = self.table_models[related_table]
+            else:
+                table_model = self.table_model
+
             ext_table_model = get_table_model(
                 ext_table,
                 ext_config["remote"],
                 self.db_search_path,
                 self._engine,
             )
-            self.table_models.append(ext_table_model)
+            self.table_models[ext_table] = ext_table_model
 
-            foreign_key = foreign(
-                rgetattr(self.table_model, ext_config["foreign"])
-            )
-            remote_key = remote(getattr(ext_table_model, ext_config["remote"]))
+            foreign_key = foreign(gqname(table_model, ext_config["foreign"]))
+            remote_key = remote(gqname(ext_table_model, ext_config["remote"]))
             self.joins.append((ext_table_model, foreign_key == remote_key))
-            foreign_relationship = relationship(
+            ext_relationship = relationship(
                 ext_table_model,
                 primaryjoin=foreign_key == remote_key,
                 foreign_keys=[foreign_key],
                 uselist=False,
                 viewonly=True,
             )
-            setattr(self.table_model, ext_table, foreign_relationship)
+            setattr(table_model, ext_table, ext_relationship)
 
         LOGGER.debug("Getting EDR Columns")
         edr_fields = provider_def.get("edr_fields", {})
