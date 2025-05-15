@@ -98,6 +98,7 @@ def test_can_query_single_edr_cols(config):
             query = query.join(*j)
 
         for edr_attr, edr_val in zip(edr_attrs, edr_vals):
+            print(query)
             result = query.with_entities(edr_attr).limit(1).scalar()
             assert result == edr_val
 
@@ -132,6 +133,7 @@ def test_locations(config):
 
     feature = locations["features"][0]
     assert feature["id"] == "DCA"
+    print(feature["properties"]["datetime"])
     assert (
         feature["properties"]["datetime"]
         == "2025-04-30 00:00:00/2025-05-04 00:00:00"
