@@ -7,6 +7,7 @@ deps:
 
 database:
 	docker compose up --build -d database
+	docker compose up --build -d mysql
 
 # run pygeoapi dev
 dev:

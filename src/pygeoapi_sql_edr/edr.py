@@ -148,7 +148,7 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
                 )
 
                 for j in self.joins:
-                    result = result.join(*j)
+                    result = result.join(*j, isouter=True)
 
                 for parameter_id, parameter_name, parameter_unit in result:
                     self._fields[parameter_id] = {
@@ -225,15 +225,13 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
                 "parameters": parameters,
                 "numberReturned": 0,
             }
-            for item in results.distinct(self.lc).limit(limit):
+
+            _ = results.with_entities(self.lc).distinct(self.lc)
+            for (item,) in _.limit(limit):
+                row = results.filter(self.lc == item)
                 response["numberReturned"] += 1
                 response["features"].append(
-                    self._sqlalchemy_to_feature(
-                        item,
-                        results.where(
-                            self.lc == rgetattr(item, self.location_field)
-                        ),
-                    )
+                    self._sqlalchemy_to_feature(row.first(), row)
                 )
 
         return response
@@ -261,13 +259,20 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
         parameter_filters = self._get_parameter_filters(select_properties)
         time_filter = self._get_datetime_filter(datetime_)
         with Session(self._engine) as session:
-            (geom,) = (
-                session.query(self.table_model)
-                .where(self.lc == location_id)
-                .with_entities(self.gc)
-                .first()
+            query = session.query(self.table_model).filter(
+                self.lc == location_id
             )
-            geom = to_shape(geom)
+
+            for j in self.joins:
+                query = query.join(*j, isouter=True)
+
+            (geom,) = query.with_entities(self.gc).first()
+
+            try:
+                geom = to_shape(geom)
+            except TypeError:
+                geom = shapely.geometry.shape(geom)
+
             coverage["domain"]["domainType"] = geom.geom_type
             if geom.geom_type == "Point":
                 coverage["domain"]["axes"].update(
@@ -291,9 +296,9 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
             )
 
             for j in self.joins:
-                query = query.join(*j)
+                query = query.join(*j, isouter=True)
 
-            _ = query.distinct(self.pic).with_entities(self.pic)
+            _ = query.with_entities(self.pic).distinct(self.pic)
             parameters = [p for (p,) in _.all()]
 
             coverage["parameters"] = self._get_parameters(parameters)
@@ -327,7 +332,7 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
                             self.rc,
                         ),
                         else_=None,
-                    ).label(parameter)
+                    ).label(str(parameter))
                     for parameter in parameters
                 ],
             ]
@@ -350,8 +355,13 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
                 row = row._asdict()
                 t_values.append(row.pop(self.time_field))
                 for parameter, value in row.items():
-                    coverage["ranges"][parameter]["values"].append(value)
-                    coverage["ranges"][parameter]["shape"][0] += 1
+                    _ = (
+                        coverage["ranges"][parameter]
+                        if coverage["ranges"].get(parameter)
+                        else coverage["ranges"][int(parameter)]
+                    )
+                    _["values"].append(value)
+                    _["shape"][0] += 1
 
         if len(t_values) > 1:
             coverage["domain"]["domainType"] += "Series"
@@ -360,11 +370,10 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
 
     def _sqlalchemy_to_feature(self, item, results, crs_transform_out=None):
         # Add properties from item
-
         datetime_view = func.concat(func.min(self.tc), "/", func.max(self.tc))
         datetime_range = results.with_entities(datetime_view).scalar()
-        parameters = results.distinct(self.pic).with_entities(self.pic).all()
-        parameters = [_[0] for _ in parameters]
+        _ = results.with_entities(self.pic).distinct(self.pic).all()
+        parameters = [p for (p,) in _]
 
         feature = {
             "type": "Feature",
@@ -376,9 +385,12 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
         }
 
         # Convert geometry to GeoJSON style
-        if hasattr(item, self.geom):
+        if rgetattr(item, self.geom):
             wkb_geom = rgetattr(item, self.geom)
-            shapely_geom = to_shape(wkb_geom)
+            try:
+                shapely_geom = to_shape(wkb_geom)
+            except TypeError:
+                shapely_geom = shapely.geometry.shape(wkb_geom)
             if crs_transform_out is not None:
                 shapely_geom = crs_transform_out(shapely_geom)
             geojson_geom = shapely.geometry.mapping(shapely_geom)
@@ -468,4 +480,45 @@ class PostgresEDRProvider(EDRProvider):
         envelope = ST_MakeEnvelope(*bbox)
         bbox_filter = self.gc.intersects(envelope)
 
+        return bbox_filter
+
+
+class MySQLEDRProvider(EDRProvider):
+    """
+    A provider for a MySQL EDR
+    """
+
+    def __init__(self, provider_def: dict):
+        """
+        MySQLProvider Class constructor
+
+        :param provider_def: provider definitions from yml pygeoapi-config.
+                             data,id_field, name set in parent class
+                             data contains the connection information
+                             for class DatabaseCursor
+        :returns: pygeoapi.provider.sql.MySQLProvider
+        """
+
+        driver_name = "mysql+pymysql"
+        extra_conn_args = {"charset": "utf8mb4"}
+        super().__init__(provider_def, driver_name, extra_conn_args)
+
+    def _get_bbox_filter(self, bbox: list[float]):
+        """
+        Construct the bounding box filter function
+        """
+        if not bbox:
+            return True  # Let everything through if no bbox
+
+        # If we are using mysql we can't use ST_MakeEnvelope since it is
+        # postgis specific and thus we have to use MBRContains with a WKT
+        # POLYGON
+
+        # Create WKT POLYGON from bbox: (minx, miny, maxx, maxy)
+        minx, miny, maxx, maxy = bbox
+        polygon_wkt = f"POLYGON(({minx} {miny}, {maxx} {miny}, {maxx} {maxy}, {minx} {maxy}, {minx} {miny}))"  # noqa
+        # Use MySQL MBRContains for index-accelerated bounding box checks
+        bbox_filter = func.MBRContains(
+            func.ST_GeomFromText(polygon_wkt), self.gc
+        )
         return bbox_filter
