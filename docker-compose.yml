@@ -19,3 +19,12 @@ services:
       - 5432:5432
     volumes:
       - ./tests/data/postgres/:/docker-entrypoint-initdb.d/:ro
+
+  mysql:
+    image: mysql:8
+    env_file:
+      - .env
+    ports:
+      - 3306:3306
+    volumes:
+      - ./tests/data/mysql/:/docker-entrypoint-initdb.d/:ro
