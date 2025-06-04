@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, InstrumentedAttribute
 import datetime
 import pytest
 
-from pygeoapi_sql_edr.edr import PostgresEDRProvider
+from pygeoapi_sql_edr.edr import MySQLEDRProvider
 from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
 from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
 
@@ -13,48 +13,60 @@ from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
 @pytest.fixture()
 def config():
     return {
-        "name": "PostgresEDRProvider",
+        "name": "MySQLEDRProvider",
         "type": "edr",
         "data": {
             "host": "localhost",
-            "dbname": "edr",
-            "user": "postgres",
+            "port": "3306",
+            "dbname": "airports",
+            "user": "mysql",
             "password": "changeMe",
-            "search_path": ["capture"],
+            "search_path": ["airports"],
         },
         "id_field": "id",
-        "table": "waterservices_daily",
-        "geom_field": "geometry",
+        "table": "landing_observations",
+        "geom_field": "airports.airport_locations.geometry_wkt",
         "time_field": "time",
         "edr_fields": {
-            "location_field": "monitoring_location_id",
+            "location_field": "location_id",
             "result_field": "value",
-            "parameter_id": "parameter_code",
-            "parameter_name": "waterservices_timeseries_metadata.parameter_name",  # noqa
-            "parameter_unit": "unit_of_measure",
+            "parameter_id": "parameter_id",
+            "parameter_name": "airport_parameters.name",
+            "parameter_unit": "airport_parameters.units",
         },
         "external_tables": {
-            "waterservices_timeseries_metadata": {
-                "foreign": "parameter_code",
-                "remote": "parameter_code",
-            }
+            "airports": {
+                "foreign": "location_id",
+                "remote": "code",
+            },
+            "airports.airport_locations": {
+                "foreign": "code",
+                "remote": "id",
+            },
+            "airport_parameters": {
+                "foreign": "parameter_id",
+                "remote": "id",
+            },
         },
     }
 
 
 def test_external_table_relationships(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
     assert p.table in p.table_models
     assert p.table_model in p.table_models.values()
-    assert len(p.table_models) == 2
+    assert len(p.table_models) == 4
 
     for table in p.external_tables:
-        assert hasattr(p.table_model, table)
+        if "." not in table:
+            assert hasattr(p.table_model, table)
+        else:
+            assert gqname(p.table_model, table)
 
 
 def test_can_query_single_edr_cols(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
     edr_attrs = [p.tc, p.pic, p.pnc, p.puc, p.lc, p.rc]
     assert all([isinstance(f, InstrumentedAttribute) for f in edr_attrs])
     assert gqname(p.table_model, p.parameter_id) == p.pic
@@ -68,12 +80,12 @@ def test_can_query_single_edr_cols(config):
         p.result_field,
     ]
     edr_vals = [
-        datetime.date(1925, 4, 10),
-        "00060",
-        "Discharge",
-        "ft^3/s",
-        "USGS-11281500",
-        129.0,
+        datetime.datetime(2025, 4, 30, 0, 0),
+        "landings",
+        "Daily plane landings",
+        "count",
+        "DCA",
+        89,
     ]
     with Session(p._engine) as session:
         result = session.query(p.table_model).first()
@@ -92,28 +104,18 @@ def test_can_query_single_edr_cols(config):
 
 def test_fields(config):
     """Testing query for a valid JSON object with geometry"""
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
-    assert len(p.fields) == 8
+    assert len(p.fields) == 1
     for k, v in p.fields.items():
-        assert len(k) == 5
+        assert len(k) == 8
         assert [k_ in ["title", "type", "x-ogc-unit"] for k_ in v]
 
     selected_mappings = {
-        "00010": {
+        "landings": {
             "type": "number",
-            "title": "Temperature, water",
-            "x-ogc-unit": "degC",
-        },
-        "00060": {
-            "type": "number",
-            "title": "Discharge",
-            "x-ogc-unit": "ft^3/s",
-        },
-        "00065": {
-            "type": "number",
-            "title": "Gage height",
-            "x-ogc-unit": "ft",
+            "title": "Daily plane landings",
+            "x-ogc-unit": "count",
         },
     }
     for k, v in selected_mappings.items():
@@ -121,17 +123,20 @@ def test_fields(config):
 
 
 def test_locations(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
     locations = p.locations()
 
     assert locations["type"] == "FeatureCollection"
-    assert len(locations["features"]) == 23
+    assert len(locations["features"]) == 3
 
     feature = locations["features"][0]
-    assert feature["id"] == "USGS-01465798"
-    assert feature["properties"]["datetime"] == "2024-11-17/2024-12-08"
-    assert feature["properties"]["parameter-name"] == ["00060"]
+    assert feature["id"] == "DCA"
+    assert (
+        feature["properties"]["datetime"]
+        == "2025-04-30 00:00:00/2025-05-04 00:00:00"
+    )
+    assert feature["properties"]["parameter-name"] == ["landings"]
 
     parameters = [p["id"] for p in locations["parameters"]]
     for f in locations["features"]:
@@ -140,7 +145,7 @@ def test_locations(config):
 
 
 def test_locations_limit(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
     locations = p.locations(limit=1)
     assert locations["type"] == "FeatureCollection"
@@ -148,11 +153,11 @@ def test_locations_limit(config):
 
     locations = p.locations(limit=500)
     assert locations["type"] == "FeatureCollection"
-    assert len(locations["features"]) == 23
+    assert len(locations["features"]) == 3
 
-    locations = p.locations(limit=5)
+    locations = p.locations(limit=3)
     assert locations["type"] == "FeatureCollection"
-    assert len(locations["features"]) == 5
+    assert len(locations["features"]) == 3
 
     parameters = [p["id"] for p in locations["parameters"]]
     for f in locations["features"]:
@@ -161,35 +166,28 @@ def test_locations_limit(config):
 
 
 def test_locations_bbox(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
-    locations = p.locations(bbox=[-109, 31, -103, 37])
-    assert len(locations["features"]) == 3
+    locations = p.locations(bbox=[-77, 38.8, -76.9, 39])
+    assert len(locations["features"]) == 0
 
 
 def test_locations_select_param(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
     locations = p.locations()
-    assert len(locations["parameters"]) == 7
+    assert len(locations["features"]) == 3
+    assert len(locations["parameters"]) == 1
 
     locations = p.locations(select_properties=["00010"])
-    assert len(locations["features"]) == 4
+    assert len(locations["features"]) == 0
     assert len(locations["parameters"]) == 1
-
-    locations = p.locations(select_properties=["00060"])
-    assert len(locations["features"]) == 9
-    assert len(locations["parameters"]) == 1
-
-    locations = p.locations(select_properties=["00010", "00060"])
-    assert len(locations["features"]) == 13
-    assert len(locations["parameters"]) == 2
 
 
 def test_get_location(config):
-    p = PostgresEDRProvider(config)
+    p = MySQLEDRProvider(config)
 
-    location = p.locations(location_id="USGS-01465798")
+    location = p.locations(location_id="DCA")
     assert [k in location for k in ["type", "domain", "parameters", "ranges"]]
 
     assert location["type"] == "Coverage"
@@ -198,14 +196,14 @@ def test_get_location(config):
     assert domain["type"] == "Domain"
     assert domain["domainType"] == "PointSeries"
 
-    assert domain["axes"]["x"]["values"] == [-74.98516031202179]
-    assert domain["axes"]["y"]["values"] == [40.05695572943445]
+    assert domain["axes"]["x"]["values"] == [-77.0377]
+    assert domain["axes"]["y"]["values"] == [38.8512]
     assert domain["axes"]["t"]["values"] == [
-        datetime.date(2024, 12, 8),
-        datetime.date(2024, 12, 5),
-        datetime.date(2024, 12, 2),
-        datetime.date(2024, 11, 20),
-        datetime.date(2024, 11, 17),
+        datetime.datetime(2025, 5, 4, 0, 0),
+        datetime.datetime(2025, 5, 3, 0, 0),
+        datetime.datetime(2025, 5, 2, 0, 0),
+        datetime.datetime(2025, 5, 1, 0, 0),
+        datetime.datetime(2025, 4, 30, 0, 0),
     ]
 
     t_len = len(domain["axes"]["t"]["values"])
@@ -221,4 +219,4 @@ def test_get_location(config):
         assert range["axisNames"][0] in domain["axes"]
         assert range["shape"][0] == t_len
         assert len(range["values"]) == t_len
-        assert range["values"] == [5.08, 5.22, 4.5, 6.94, 8.39]
+        assert range["values"] == [88, 87, 85, 90, 89]

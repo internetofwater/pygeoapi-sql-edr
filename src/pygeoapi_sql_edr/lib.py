@@ -19,18 +19,14 @@ def recursive_getattr(obj: Any, attr: str) -> Any:
 
 
 def get_column_from_qualified_name(model: Any, qualified_name: str) -> Any:
-    # Split the fully qualified name into table name and column name
-    parts = qualified_name.split(".")
+    # Split the fully qualified name into next relationship
+    parts = qualified_name.split(".", 1)
 
-    # Check if the parts are of different table
-    if len(parts) == 2:
-        table_name, column_name = parts
-
-        table = getattr(model, table_name)
-        if table:
-            column = getattr(table.mapper.class_, column_name)
-            if column:
-                return column
+    # Check if there are more tables to hop
+    if len(parts) >= 2:
+        nt, ft = parts
+        hop = getattr(model, nt)
+        return get_column_from_qualified_name(hop.mapper.class_, ft)
 
     else:
-        return getattr(model, qualified_name)
+        return recursive_getattr(model, qualified_name)
