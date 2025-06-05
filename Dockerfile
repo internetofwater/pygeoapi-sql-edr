@@ -3,12 +3,19 @@
 
 FROM geopython/pygeoapi:latest
 
-COPY . /pygeoapi-sql-edr
+COPY *.toml *.yml /pygeoapi-sql-edr/
+COPY src/ /pygeoapi-sql-edr/src/
 
-RUN pip install --no-deps pygeoapi-plugins
-RUN pip install -e /pygeoapi-sql-edr
+RUN pip install -e /pygeoapi-sql-edr 
+RUN apt-get update \
+    && apt-get install -y git \
+    && git clone https://github.com/C-Loftus/pygeoapi.git /tmp \
+    && rm -rf /pygeoapi \
+    && mv -f /tmp/pygeoapi /pygeoapi
 
 ENV PYGEOAPI_CONFIG=/pygeoapi-sql-edr/pygeoapi.config.yml
 ENV PYGEOAPI_OPENAPI=/pygeoapi-sql-edr/pygeoapi.openapi.yml
 
-ENTRYPOINT [ "/pygeoapi-sql-edr/docker/entrypoint.sh" ]
+COPY docker/entrypoint.sh /entrypoint.sh
+
+ENTRYPOINT [ "/entrypoint.sh" ]

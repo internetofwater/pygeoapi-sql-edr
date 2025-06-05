@@ -13,8 +13,8 @@ from sqlalchemy import func, case, select
 from sqlalchemy.orm import Session, relationship, aliased
 from sqlalchemy.sql.expression import or_, and_
 
-from pygeoapi.provider.sql import GenericSQLProvider
 from pygeoapi.provider.base_edr import BaseEDRProvider
+from pygeoapi.provider.sql import GenericSQLProvider
 
 from pg_edr.lib import get_base_schema
 from pg_edr.lib import get_column_from_qualified_name as gqname
@@ -258,8 +258,8 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
             if geom.geom_type == "Point":
                 coverage["domain"]["axes"].update(
                     {
-                        "x": {"values": [shapely.get_x(geom)]},
-                        "y": {"values": [shapely.get_y(geom)]},
+                        "x": {"values": [geom.x]},
+                        "y": {"values": [geom.y]},
                     }
                 )
             else:
