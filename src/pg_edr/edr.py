@@ -64,6 +64,9 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
         :returns: pygeoapi_sql_edr.edr.EDRProvider
         """
         LOGGER.debug("Initialising EDR SQL provider.")
+        # Flatten EDR fields
+        provider_def.update(**provider_def.get("edr_fields", {}))
+
         BaseEDRProvider.__init__(self, provider_def)
         GenericSQLProvider.__init__(
             self, provider_def, driver_name, extra_conn_args
@@ -82,29 +85,26 @@ class EDRProvider(BaseEDRProvider, GenericSQLProvider):
         self.joins = self._get_relationships()
         self.model = self.base.classes[self.table]
 
-        LOGGER.debug("Getting EDR Columns")
-        edr_fields = provider_def.get("edr_fields", {})
-
         self.tc = gqname(self.model, self.time_field)
         self.gc = gqname(self.model, self.geom)
 
-        self.parameter_id = edr_fields.get("parameter_id", "parameter_id")
+        self.parameter_id = provider_def.get("parameter_id", "parameter_id")
         self.pic = gqname(self.model, self.parameter_id)
 
-        self.parameter_name = edr_fields.get(
+        self.parameter_name = provider_def.get(
             "parameter_name", "parameter_name"
         )
         self.pnc = gqname(self.model, self.parameter_name)
 
-        self.parameter_unit = edr_fields.get(
+        self.parameter_unit = provider_def.get(
             "parameter_unit", "parameter_unit"
         )
         self.puc = gqname(self.model, self.parameter_unit)
 
-        self.result_field = edr_fields.get("result_field", "value")
+        self.result_field = provider_def.get("result_field", "value")
         self.rc = gqname(self.model, self.result_field)
 
-        self.location_field = edr_fields.get(
+        self.location_field = provider_def.get(
             "location_field", "monitoring_location_id"
         )
         self.lc = gqname(self.model, self.location_field)
