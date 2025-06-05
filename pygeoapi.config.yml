@@ -100,7 +100,7 @@ resources:
         end: null
     providers:
       - type: edr
-        name: pygeoapi_sql_edr.edr.PostgresEDRProvider
+        name: pg_edr.edr.PostgresEDRProvider
         data:
           host: ${POSTGRES_HOST}
           dbname: ${POSTGRES_DB}
@@ -134,3 +134,52 @@ resources:
         id_field: id
         geom_field: geometry
         time_field: time
+
+  airport_landings:
+    type: collection
+    title: Airport Landings
+    description:
+      en: Airport Landings
+    keywords:
+      en:
+        - airports
+        - daily
+    extents:
+      spatial:
+        bbox: [-180, -90, 180, 90]
+        crs: http://www.opengis.net/def/crs/OGC/1.3/CRS84
+      temporal:
+        begin: null
+        end: null
+    providers:
+      - type: edr
+        name: pg_edr.edr.MySQLEDRProvider
+        data:
+          host: ${MYSQL_HOST}
+          dbname: ${MYSQL_DATABASE}
+          user: ${MYSQL_USER}
+          port: ${MYSQL_PORT}
+          password: ${MYSQL_PASSWORD}
+          search_path:
+            - ${MYSQL_DATABASE}
+        table: landing_observations
+        edr_fields: # Required EDR Fields
+          id_field: id
+          geom_field: airports.airport_locations.geometry_wkt
+          time_field: time
+          location_field: location_id
+          result_field: value
+          parameter_id: parameter_id
+          parameter_name: airport_parameters.name
+          parameter_unit: airport_parameters.units
+
+        external_tables: # Additional table joins
+          airports:
+            foreign: location_id
+            remote: code
+          airports.airport_locations:
+            foreign: code
+            remote: id
+          airport_parameters:
+            foreign: parameter_id
+            remote: id

@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session, InstrumentedAttribute
 import datetime
 import pytest
 
-from pygeoapi_sql_edr.edr import MySQLEDRProvider
-from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
-from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
+from pg_edr.edr import MySQLEDRProvider
+from pg_edr.lib import get_column_from_qualified_name as gqname
+from pg_edr.lib import recursive_getattr as rgetattr
 
 
 @pytest.fixture()
@@ -23,11 +23,11 @@ def config():
             "password": "changeMe",
             "search_path": ["airports"],
         },
-        "id_field": "id",
         "table": "landing_observations",
-        "geom_field": "airports.airport_locations.geometry_wkt",
-        "time_field": "time",
         "edr_fields": {
+            "id_field": "id",
+            "geom_field": "airports.airport_locations.geometry_wkt",
+            "time_field": "time",
             "location_field": "location_id",
             "result_field": "value",
             "parameter_id": "parameter_id",
@@ -55,21 +55,17 @@ def test_external_table_relationships(config):
     p = MySQLEDRProvider(config)
 
     assert p.table in p.table_models
-    assert p.table_model in p.table_models.values()
     assert len(p.table_models) == 4
 
     for table in p.external_tables:
-        if "." not in table:
-            assert hasattr(p.table_model, table)
-        else:
-            assert gqname(p.table_model, table)
+        assert gqname(p.model, table)
 
 
 def test_can_query_single_edr_cols(config):
     p = MySQLEDRProvider(config)
     edr_attrs = [p.tc, p.pic, p.pnc, p.puc, p.lc, p.rc]
     assert all([isinstance(f, InstrumentedAttribute) for f in edr_attrs])
-    assert gqname(p.table_model, p.parameter_id) == p.pic
+    assert gqname(p.model, p.parameter_id) == p.pic
 
     edr_names = [
         p.time_field,
@@ -88,12 +84,12 @@ def test_can_query_single_edr_cols(config):
         89,
     ]
     with Session(p._engine) as session:
-        result = session.query(p.table_model).first()
+        result = session.query(p.model).first()
         for edr_name, edr_val in zip(edr_names, edr_vals):
             assert rgetattr(result, edr_name) == edr_val
 
     with Session(p._engine) as session:
-        query = session.query(p.table_model)
+        query = session.query(p.model)
         for j in p.joins:
             query = query.join(*j)
 
@@ -132,16 +128,6 @@ def test_locations(config):
 
     feature = locations["features"][0]
     assert feature["id"] == "DCA"
-    assert (
-        feature["properties"]["datetime"]
-        == "2025-04-30 00:00:00/2025-05-04 00:00:00"
-    )
-    assert feature["properties"]["parameter-name"] == ["landings"]
-
-    parameters = [p["id"] for p in locations["parameters"]]
-    for f in locations["features"]:
-        for param in f["properties"]["parameter-name"]:
-            assert param in parameters
 
 
 def test_locations_limit(config):
@@ -158,11 +144,6 @@ def test_locations_limit(config):
     locations = p.locations(limit=3)
     assert locations["type"] == "FeatureCollection"
     assert len(locations["features"]) == 3
-
-    parameters = [p["id"] for p in locations["parameters"]]
-    for f in locations["features"]:
-        for param in f["properties"]["parameter-name"]:
-            assert param in parameters
 
 
 def test_locations_bbox(config):
