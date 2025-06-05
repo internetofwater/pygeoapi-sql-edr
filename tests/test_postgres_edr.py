@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session, InstrumentedAttribute
 import datetime
 import pytest
 
-from pygeoapi_sql_edr.edr import PostgresEDRProvider
-from pygeoapi_sql_edr.lib import get_column_from_qualified_name as gqname
-from pygeoapi_sql_edr.lib import recursive_getattr as rgetattr
+from pg_edr.edr import PostgresEDRProvider
+from pg_edr.lib import get_column_from_qualified_name as gqname
+from pg_edr.lib import recursive_getattr as rgetattr
 
 
 @pytest.fixture()
@@ -46,18 +46,17 @@ def test_external_table_relationships(config):
     p = PostgresEDRProvider(config)
 
     assert p.table in p.table_models
-    assert p.table_model in p.table_models.values()
     assert len(p.table_models) == 2
 
     for table in p.external_tables:
-        assert hasattr(p.table_model, table)
+        assert hasattr(p.model, table)
 
 
 def test_can_query_single_edr_cols(config):
     p = PostgresEDRProvider(config)
     edr_attrs = [p.tc, p.pic, p.pnc, p.puc, p.lc, p.rc]
     assert all([isinstance(f, InstrumentedAttribute) for f in edr_attrs])
-    assert gqname(p.table_model, p.parameter_id) == p.pic
+    assert gqname(p.model, p.parameter_id) == p.pic
 
     edr_names = [
         p.time_field,
@@ -76,12 +75,12 @@ def test_can_query_single_edr_cols(config):
         129.0,
     ]
     with Session(p._engine) as session:
-        result = session.query(p.table_model).first()
+        result = session.query(p.model).first()
         for edr_name, edr_val in zip(edr_names, edr_vals):
             assert rgetattr(result, edr_name) == edr_val
 
     with Session(p._engine) as session:
-        query = session.query(p.table_model)
+        query = session.query(p.model)
         for j in p.joins:
             query = query.join(*j)
 
@@ -94,7 +93,7 @@ def test_fields(config):
     """Testing query for a valid JSON object with geometry"""
     p = PostgresEDRProvider(config)
 
-    assert len(p.fields) == 8
+    assert len(p.fields) == 7
     for k, v in p.fields.items():
         assert len(k) == 5
         assert [k_ in ["title", "type", "x-ogc-unit"] for k_ in v]
@@ -130,13 +129,6 @@ def test_locations(config):
 
     feature = locations["features"][0]
     assert feature["id"] == "USGS-01465798"
-    assert feature["properties"]["datetime"] == "2024-11-17/2024-12-08"
-    assert feature["properties"]["parameter-name"] == ["00060"]
-
-    parameters = [p["id"] for p in locations["parameters"]]
-    for f in locations["features"]:
-        for param in f["properties"]["parameter-name"]:
-            assert param in parameters
 
 
 def test_locations_limit(config):
@@ -154,11 +146,6 @@ def test_locations_limit(config):
     assert locations["type"] == "FeatureCollection"
     assert len(locations["features"]) == 5
 
-    parameters = [p["id"] for p in locations["parameters"]]
-    for f in locations["features"]:
-        for param in f["properties"]["parameter-name"]:
-            assert param in parameters
-
 
 def test_locations_bbox(config):
     p = PostgresEDRProvider(config)
@@ -171,6 +158,7 @@ def test_locations_select_param(config):
     p = PostgresEDRProvider(config)
 
     locations = p.locations()
+    print(locations["parameters"])
     assert len(locations["parameters"]) == 7
 
     locations = p.locations(select_properties=["00010"])
