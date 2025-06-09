@@ -12,7 +12,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project]
-name = "pg-edr"
+name = "pgedr"
 version = "0.1.0"
 description = "An OGC API EDR implementation using SQL for pygeoapi"
 authors = [{name = "Benjamin Webb", email = "bwebb@lincolninst.edu"}]
@@ -36,7 +36,7 @@ classifiers=[   # see https://pypi.org/classifiers/
         'Environment :: Console',
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
-        'License :: MIT License',
+        'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python',
         'Topic :: Scientific/Engineering :: Atmospheric Science',
@@ -45,8 +45,8 @@ classifiers=[   # see https://pypi.org/classifiers/
     ]
 
 [project.urls]
-Homepage = "https://github.com/internetofwater/pygeoapi-sql-edr"
-Repository = "https://github.com/internetofwater/pygeoapi-sql-edr"
+Homepage = "https://github.com/internetofwater/pgedr"
+Repository = "https://github.com/internetofwater/pgedr"
 
 [tool.pytest.ini_options]
-addopts = "--cov=pg_edr"
+addopts = "--cov=pgedr"
