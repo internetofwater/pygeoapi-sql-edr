@@ -71,7 +71,9 @@ def get_base_schema(tables: tuple[str], schema: str, engine):
     return _Base
 
 
-def _name_for_scalar_relationship(base, local_cls, referred_cls, constraint):
+def _name_for_scalar_relationship(
+    base, local_cls, referred_cls, constraint
+) -> str:
     """Function used when automapping classes and relationships from
     database schema and fixes potential naming conflicts.
     """
@@ -87,10 +89,10 @@ def _name_for_scalar_relationship(base, local_cls, referred_cls, constraint):
     return name
 
 
-def with_joins(self, joins, **kw):
-    query = self
-    for j in joins:
-        query = query.join(*j, **kw)
+def with_joins(query, joins, **kw):
+    """ """
+    for join in joins:
+        query = query.join(*join, **kw)
     return query
 
 
